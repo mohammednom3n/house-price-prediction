@@ -1,0 +1,14 @@
+{
+  "model": "Lasso (alpha=0.001), TransformedTargetRegressor(log1p)",
+  "cv_rmse_mean": 20400.76458592702,
+  "cv_rmse_std": 1161.0464147118619,
+  "num_features": 77,
+  "num_numeric": 48,
+  "num_categorical": 29,
+  "train_shape": [
+    1456,
+    78
+  ],
+  "dropped_columns_note": "Dropped very sparse columns in preprocessing",
+  "created_at": "2025-09-28T17:30:46.349812Z"
+}
