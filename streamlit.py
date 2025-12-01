@@ -260,10 +260,10 @@ with right_col:
                 data = resp.json()
 
                 # Adjust this if your API returns a different field name
-                pred = data.get("prediction") or data.get("price") or data
+                result = data.get("prediction") or data.get("price") or data
 
                 try:
-                    price_val = float(pred)
+                    price_val = float(result)
                 except Exception:
                     st.error("API response format is not as expected:")
                     st.write(data)
