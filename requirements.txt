@@ -1,0 +1,9 @@
+streamlit==1.51.0
+
+numpy==2.3.4
+pandas==2.3.3
+scikit-learn==1.7.2
+joblib==1.5.2
+
+requests==2.32.5   # if your UI calls your FastAPI API
+python-dateutil==2.9.0.post0
