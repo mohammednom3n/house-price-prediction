@@ -11,4 +11,4 @@ def predict_price(input_data: dict):
     
     df = pd.DataFrame([input_data])
     price = model.predict(df)[0]
-    return price
+    return int(price)
