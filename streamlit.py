@@ -1,22 +1,19 @@
-import os
-from pathlib import Path
-
-import joblib
-import numpy as np
-import pandas as pd
+import requests
 import streamlit as st
+import pandas as pd
 
 # ======================
-# 🔧 Config & Constants
+# 🔧 CONFIG
 # ======================
+
+API_URL = "https://house-price-prediction-kox7.onrender.com/predict"
 
 st.set_page_config(
     page_title="Ames House Price Predictor",
     page_icon="🏠",
-    layout="wide"
+    layout="wide",
 )
 
-# Final selected feature order – MUST match training
 FEATURE_COLUMNS = [
     "OverallQual",
     "GrLivArea",
@@ -35,11 +32,10 @@ FEATURE_COLUMNS = [
     "MSSubClass",
 ]
 
-# Nice labels + helper text for UI
 FEATURE_META = {
     "OverallQual": {
         "label": "Overall Material & Finish Quality (1–10)",
-        "help": "Overall quality of the house (10 = very excellent, 1 = very poor).",
+        "help": "Overall quality of the house (10 = excellent, 1 = very poor).",
         "min": 1, "max": 10, "step": 1, "default": 7,
     },
     "GrLivArea": {
@@ -116,32 +112,14 @@ FEATURE_META = {
 
 
 # ======================
-# 📦 Load Model
-# ======================
-
-@st.cache_resource
-def load_model():
-    # Adjust path if your model is elsewhere
-    base_dir = Path(__file__).resolve().parent
-    model_path = base_dir / "models" / "house_price_production.pkl"
-    if not model_path.exists():
-        st.error(f"Model file not found at: {model_path}")
-        st.stop()
-    return joblib.load(model_path)
-
-
-model = load_model()
-
-
-# ======================
-# 🎨 Custom Styling
+# 🎨 Styling
 # ======================
 
 st.markdown(
     """
     <style>
     .main-title {
-        font-size: 2.3rem;
+        font-size: 2.4rem;
         font-weight: 700;
         margin-bottom: 0.2rem;
     }
@@ -152,7 +130,7 @@ st.markdown(
     }
     .prediction-card {
         padding: 1.5rem;
-        border-radius: 0.8rem;
+        border-radius: 0.9rem;
         background: linear-gradient(135deg, #1d976c, #93f9b9);
         color: white;
         box-shadow: 0 10px 25px rgba(0,0,0,0.15);
@@ -177,55 +155,50 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
 # ======================
 # 🧱 Layout
 # ======================
 
 st.markdown('<div class="main-title">🏠 Ames House Price Predictor</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="subtitle">Estimate the sale price of a house using a production-grade ML model trained on the Ames Housing dataset.</div>',
+    '<div class="subtitle">Frontend in Streamlit • Backend FastAPI on Render • CatBoost regression model on top 15 numeric features.</div>',
     unsafe_allow_html=True
 )
 
-left_col, right_col = st.columns([1.4, 1])
+left_col, right_col = st.columns([1.5, 1])
 
-# -------- Sidebar info --------
+# ---- Sidebar ----
 with st.sidebar:
-    st.header("ℹ️ About this app")
+    st.header("ℹ️ About")
     st.write(
         """
-        This app uses a **CatBoost regression model** trained on the Ames Housing dataset.
-        
-        The model was:
-        - Cross-validated using 5-fold CV  
-        - Trained on **15 most important numeric features**  
-        - Wrapped in a scikit-learn `Pipeline` for clean deployment
+        This app sends your inputs to a **FastAPI ML service** hosted on Render:
+
+        - Model: CatBoost Regressor  
+        - Trained on Ames Housing dataset  
+        - Uses 15 most important numeric features  
+        - Deployed as a REST API (`/predict`)
         """
     )
     st.markdown("---")
-    st.subheader("📊 Model Performance (Validation)")
+    st.subheader("📊 Validation Metrics (Reduced Model)")
     st.write("- R² ≈ **0.91**")
     st.write("- MAE ≈ **$15.9K**")
     st.write("- RMSE ≈ **$22.2K**")
     st.write("- MAPE ≈ **≈9.6%**")
-
     st.markdown("---")
-    st.caption("Tip: Start with the defaults and tweak values to see how price responds.")
+    st.caption("Tip: Start with defaults and tweak values to see how price responds.")
 
 
-# -------- Main Input Form --------
+# ---- Inputs ----
 with left_col:
     st.subheader("📝 Enter Property Details")
 
+    user_inputs = {}
     with st.form("house_form"):
-        # Split inputs into two columns for nicer UI
-        col1, col2 = st.columns(2)
+        c1, c2 = st.columns(2)
 
-        user_inputs = {}
-
-        # First column fields
-        with col1:
+        with c1:
             for key in [
                 "OverallQual",
                 "GrLivArea",
@@ -247,8 +220,7 @@ with left_col:
                     key=key,
                 )
 
-        # Second column fields
-        with col2:
+        with c2:
             for key in [
                 "2ndFlrSF",
                 "YearBuilt",
@@ -259,64 +231,70 @@ with left_col:
                 "MSSubClass",
             ]:
                 meta = FEATURE_META[key]
-                # Choose int or float input
-                is_int = meta["step"].is_integer() and meta["min"].is_integer() and meta["max"].is_integer()
-                if is_int:
-                    user_inputs[key] = st.number_input(
-                        meta["label"],
-                        min_value=int(meta["min"]),
-                        max_value=int(meta["max"]),
-                        value=int(meta["default"]),
-                        step=int(meta["step"]),
-                        help=meta["help"],
-                        key=key,
-                    )
-                else:
-                    user_inputs[key] = st.number_input(
-                        meta["label"],
-                        min_value=float(meta["min"]),
-                        max_value=float(meta["max"]),
-                        value=float(meta["default"]),
-                        step=float(meta["step"]),
-                        help=meta["help"],
-                        key=key,
-                    )
+                user_inputs[key] = st.number_input(
+                    meta["label"],
+                    min_value=float(meta["min"]),
+                    max_value=float(meta["max"]),
+                    value=float(meta["default"]),
+                    step=float(meta["step"]),
+                    help=meta["help"],
+                    key=key,
+                )
 
         submitted = st.form_submit_button("🔮 Predict House Price")
 
-# -------- Prediction & Output --------
+
+# ---- Prediction ----
 with right_col:
     st.subheader("📌 Prediction")
 
     if submitted:
-        # Build input DataFrame in correct column order
-        input_data = pd.DataFrame([[user_inputs[col] for col in FEATURE_COLUMNS]], columns=FEATURE_COLUMNS)
+        # Build payload exactly how the API expects it
+        payload = {col: float(user_inputs[col]) for col in FEATURE_COLUMNS}
 
         try:
-            pred_price = model.predict(input_data)[0]
-            pred_price = float(pred_price)
+            with st.spinner("Calling prediction API..."):
+                resp = requests.post(API_URL, json=payload, timeout=15)
 
-            st.markdown('<div class="prediction-card">', unsafe_allow_html=True)
-            st.markdown('<div class="metric-label">Estimated Sale Price</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="prediction-value">${pred_price:,.0f}</div>',
-                unsafe_allow_html=True
-            )
-            st.markdown(
-                "<div class='metric-label'>This estimate is based on your inputs and the learned patterns from the Ames Housing dataset.</div>",
-                unsafe_allow_html=True
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
+            if resp.status_code == 200:
+                data = resp.json()
 
-            with st.expander("🔍 View input summary"):
-                st.write(input_data.T.rename(columns={0: "Value"}))
+                # Adjust this if your API returns a different field name
+                pred = data.get("prediction") or data.get("price") or data
 
-        except Exception as e:
-            st.error(f"Something went wrong while predicting: {e}")
+                try:
+                    price_val = float(pred)
+                except Exception:
+                    st.error("API response format is not as expected:")
+                    st.write(data)
+                else:
+                    st.markdown('<div class="prediction-card">', unsafe_allow_html=True)
+                    st.markdown('<div class="metric-label">Estimated Sale Price</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="prediction-value">${price_val:,.0f}</div>',
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        "<div class='metric-label'>Powered by a CatBoost model deployed on FastAPI (Render).</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    with st.expander("🔍 View input summary"):
+                        df_in = pd.DataFrame.from_dict(user_inputs, orient="index", columns=["Value"])
+                        st.write(df_in)
+
+            else:
+                st.error(f"❌ API returned status code {resp.status_code}")
+                st.write(resp.text)
+
+        except requests.exceptions.RequestException as e:
+            st.error("❌ Could not reach the prediction API.")
+            st.write(str(e))
     else:
-        st.info("Fill in the property details on the left and click **Predict House Price** to see the model's estimate.")
+        st.info("Fill the details on the left and click **Predict House Price** to get an estimate.")
 
 st.markdown(
-    "<div class='footer'>Built as an end-to-end ML project: data → model → evaluation → deployment.</div>",
+    "<div class='footer'>Built as an end-to-end ML system: training → API → Streamlit frontend.</div>",
     unsafe_allow_html=True
 )
