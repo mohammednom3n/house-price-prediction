@@ -91,7 +91,8 @@ Both backend and frontend are containerized, ensuring reproducibility, consisten
 
 ## 🗂️ Project Structure
 
-.
+```
+house_price_prediction/
 ├── api/main.py        (FastAPI backend)
 ├── models/ames_house_price_production.pkl
 ├── app.py             (Streamlit frontend)
@@ -104,7 +105,7 @@ Both backend and frontend are containerized, ensuring reproducibility, consisten
 ├── requirements.txt
 ├── Dockerfile
 └── README.md
-
+```
 
 ## ▶️ Run Locally
 
