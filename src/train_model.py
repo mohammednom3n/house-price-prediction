@@ -1,102 +1,119 @@
-# src/train_model.py
-"""
-Train model script for House Prices project.
-Usage:
-  Activate venv and run: python src/train_model.py
-This will:
- - load data/processed/train_final.csv (or train_clean.csv if final absent)
- - train a Lasso pipeline (log-target)
- - evaluate with 5-fold CV (RMSE)
- - save models/pipeline_v2.joblib and models/pipeline_v2_meta.json
-"""
-import os
-import json
-from datetime import datetime
-
-import joblib
+import sys
+from pathlib import Path
 import numpy as np
 import pandas as pd
+
+proj_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(proj_root))
+
+# 1) LOAD DATA
+
+RAW_DATA = proj_root / "data" / "raw"
+
+train_path = RAW_DATA / "train.csv"
+
+df = pd.read_csv(train_path)
+
+# 2) Pre-Pipeline Manual Cleaning
+
+df.drop(columns = ["PoolQC","MiscFeature","Alley", "Fence", "MasVnrType"], inplace = True)
+
+# Fill null values
+missing = df.isnull().sum()
+missing_cols = missing[missing>0].sort_values(ascending = False).index.tolist()
+missing_cols
+
+for col in missing_cols:
+    df[col] = df[col].fillna("None")
+cat_cols = df.select_dtypes(include = ["O"]).columns
+df[cat_cols] = df[cat_cols].astype(str)
+
+# outliers removal
+outliers = (df["GrLivArea"] > 4000) & (df["SalePrice"] < 300000)
+df = df[~outliers]
+
+# 3) Define Target and Features
+X = df.drop(columns = ["SalePrice"])
+y = df["SalePrice"]
+
+# Split the dataset
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X , y, test_size = 0.2, random_state = 42)
+
+cat_features = X_train.select_dtypes(include = ["O"]).columns
+num_features = X_train.select_dtypes(include = ["int64", "float64"]).columns
+
+
+# For production, we need to pick top 15 features and retrain the model on these important features
+top_features = [
+    "OverallQual",
+    "GrLivArea",
+    "1stFlrSF",
+    "TotalBsmtSF",
+    "BsmtFinSF1",
+    "LotArea",
+    "GarageCars",
+    "TotRmsAbvGrd",
+    "2ndFlrSF",
+    "YearBuilt",
+    "GarageArea",
+    "FullBath",
+    "OverallCond",
+    "YearRemodAdd",
+    "MSSubClass"
+]
+
+# Reduced columns
+X_train_red = X_train[top_features]
+X_test_red  = X_test[top_features]
+
+# 4) Building a pipeline:
+
 from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.linear_model import Lasso
-from sklearn.model_selection import cross_val_score
-from sklearn.compose import TransformedTargetRegressor
+from catboost import CatBoostRegressor
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DATA_PROCESSED = os.path.join(ROOT, "data", "processed")
-MODELS_DIR = os.path.join(ROOT, "models")
-os.makedirs(MODELS_DIR, exist_ok=True)
-
-# 1) load data (prefer train_final.csv if present)
-train_final = os.path.join(DATA_PROCESSED, "train_final.csv")
-train_clean = os.path.join(DATA_PROCESSED, "train_clean.csv")
-if os.path.exists(train_final):
-    df = pd.read_csv(train_final)
-elif os.path.exists(train_clean):
-    df = pd.read_csv(train_clean)
-else:
-    raise FileNotFoundError("No processed train file found. Run preprocessing first.")
-
-print("Loaded data:", df.shape)
-
-# 2) prepare X, y
-if "SalePrice" not in df.columns:
-    raise KeyError("train file missing SalePrice column")
-
-X = df.drop(columns=["SalePrice"])
-y = df["SalePrice"].values
-
-num_cols = X.select_dtypes(include=[np.number]).columns.tolist()
-cat_cols = X.select_dtypes(include=["object"]).columns.tolist()
-print(f"Num cols: {len(num_cols)}, Cat cols: {len(cat_cols)}")
-
-# 3) build preprocessor & pipeline (same as notebook)
-num_pipeline = Pipeline([
+final_pipeline = Pipeline([
     ("imputer", SimpleImputer(strategy="median")),
-    ("scaler", StandardScaler())
+    ("scaler", StandardScaler()),
+    ("model", CatBoostRegressor(
+        iterations=700,
+        learning_rate=0.05,
+        random_state=42,
+        verbose=0
+    )),
 ])
-cat_pipeline = Pipeline([
-    ("imputer", SimpleImputer(strategy="constant", fill_value="None")),
-    ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
-])
-preprocessor = ColumnTransformer([
-    ("num", num_pipeline, num_cols),
-    ("cat", cat_pipeline, cat_cols)
-], remainder="drop")
 
-# 4) model: Lasso (chosen champion)
-lasso = Lasso(alpha=0.001, random_state=42, max_iter=10000)
-pipe = Pipeline([("preprocessor", preprocessor), ("model", lasso)])
-ttr = TransformedTargetRegressor(regressor=pipe, func=np.log1p, inverse_func=np.expm1)
 
-# 5) cross-validate
-print("Running 5-fold CV (neg_root_mean_squared_error)...")
-scores = -cross_val_score(ttr, X, y, cv=5, scoring="neg_root_mean_squared_error", n_jobs=-1)
-print(f"CV RMSE: mean={scores.mean():.2f}, std={scores.std():.2f}")
+# 5) Train model
+final_pipeline.fit(X_train_red, y_train)
 
-# 6) fit final model on full train and save
-print("Fitting final model on full training set...")
-ttr.fit(X, y)
-model_path = os.path.join(MODELS_DIR, "pipeline_v2.joblib")
-joblib.dump(ttr, model_path)
-print("Saved model:", model_path)
+# 6) Evaluate model
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# 7) save metadata
-meta = {
-    "model": "Lasso (alpha=0.001), TransformedTargetRegressor(log1p)",
-    "cv_rmse_mean": float(scores.mean()),
-    "cv_rmse_std": float(scores.std()),
-    "num_features": len(num_cols) + len(cat_cols),
-    "num_numeric": len(num_cols),
-    "num_categorical": len(cat_cols),
-    "train_shape": df.shape,
-    "dropped_columns_note": "Dropped very sparse columns in preprocessing",
-    "created_at": datetime.utcnow().isoformat() + "Z"
-}
-with open(os.path.join(MODELS_DIR, "pipeline_v2_meta.json"), "w", encoding="utf-8") as f:
-    json.dump(meta, f, indent=2)
-print("Saved metadata.")
+y_pred = final_pipeline.predict(X_test_red)
 
-print("Done.")
+mae  = mean_absolute_error(y_test, y_pred)
+mse = mean_squared_error(y_test, y_pred)
+rmse = np.sqrt(mse)
+r2   = r2_score(y_test, y_pred)
+
+mape = (abs((y_test - y_pred) / y_test)).mean() * 100
+
+print("MAE:", mae)
+print("RMSE:", rmse)
+print("R2:", r2)
+print("MAPE %:", mape)
+
+# 7) Save model
+
+import joblib
+
+model_dir = proj_root / "models"
+model_dir.mkdir(exist_ok=True)
+
+model_path = model_dir / "house_price_model.pkl"
+joblib.dump(final_pipeline, model_path)
+
+print(f"Model saved to: {model_path}")

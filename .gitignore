@@ -217,3 +217,8 @@ models/
 
 # Jupyter notebook checkpoints
 *.ipynb_checkpoints/
+
+catboost_info/
+*.pkl
+.ipynb_checkpoints/
+venv/
