@@ -123,7 +123,7 @@ FEATURE_META = {
 def load_model():
     # Adjust path if your model is elsewhere
     base_dir = Path(__file__).resolve().parent
-    model_path = base_dir / "models" / "ames_house_price_production.pkl"
+    model_path = base_dir / "models" / "house_price_production.pkl"
     if not model_path.exists():
         st.error(f"Model file not found at: {model_path}")
         st.stop()
