@@ -247,7 +247,6 @@ with left_col:
 # ---- Prediction ----
 with right_col:
     st.subheader("📌 Prediction")
-
     if submitted:
         # Build payload exactly how the API expects it
         payload = {col: float(user_inputs[col]) for col in FEATURE_COLUMNS}
@@ -259,15 +258,13 @@ with right_col:
             if resp.status_code == 200:
                 data = resp.json()
 
-                # Adjust this if your API returns a different field name
-                pred  = data.get("Estimated Price")
-
-                try:
-                    price_val = float(pred)
-                except Exception:
+                # ✅ Expect clean API response: {"prediction": <float>}
+                if "prediction" not in data:
                     st.error("API response format is not as expected:")
                     st.write(data)
                 else:
+                    price_val = float(data["prediction"])
+
                     st.markdown('<div class="prediction-card">', unsafe_allow_html=True)
                     st.markdown('<div class="metric-label">Estimated Sale Price</div>', unsafe_allow_html=True)
                     st.markdown(
@@ -291,8 +288,10 @@ with right_col:
         except requests.exceptions.RequestException as e:
             st.error("❌ Could not reach the prediction API.")
             st.write(str(e))
+
     else:
         st.info("Fill the details on the left and click **Predict House Price** to get an estimate.")
+
 
 st.markdown(
     "<div class='footer'>Built as an end-to-end ML system: training → API → Streamlit frontend.</div>",

@@ -27,5 +27,5 @@ class PrdictionResquest(BaseModel):
 def predict(req: PrdictionResquest):
     data = req.dict(by_alias=True)
     result = predict_price(data)
-    return {"Esitmated Price": result}
+    return {"prediction": float(result)}
     
