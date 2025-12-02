@@ -260,7 +260,7 @@ with right_col:
                 data = resp.json()
 
                 # Adjust this if your API returns a different field name
-                pred  = data.get("Estimated Pric")
+                pred  = data.get("Estimated Price")
 
                 try:
                     price_val = float(pred)
