@@ -254,16 +254,16 @@ with right_col:
 
         try:
             with st.spinner("Calling prediction API..."):
-                resp = requests.post(API_URL, json=payload, timeout=15)
+                resp = requests.post(API_URL, json=payload, timeout=60)
 
             if resp.status_code == 200:
                 data = resp.json()
 
                 # Adjust this if your API returns a different field name
-                result = data.get("prediction") or data.get("price") or data
+                pred  = data.get("Estimated Pric")
 
                 try:
-                    price_val = float(result)
+                    price_val = float(pred)
                 except Exception:
                     st.error("API response format is not as expected:")
                     st.write(data)
